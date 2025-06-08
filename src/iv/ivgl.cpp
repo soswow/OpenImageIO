@@ -190,6 +190,7 @@ IvGL::create_textures(void)
 const char*
 IvGL::color_func_shader_text()
 {
+    // language=GLSL
     return R"glsl(
         uniform float gain;
         uniform float gamma;
