@@ -929,6 +929,50 @@ public:
 
 template<class Rtype, class Atype>
 static bool
+bayer_demosaic_raw_impl(ImageBuf& dst, const ImageBuf& src,
+                        const std::string& layout,
+                        const float (&white_balance)[4], ROI roi,
+                        int nthreads)
+{
+    // Raw algorithm: show each pixel with only its captured color channel
+    // This creates a visual representation of the Bayer pattern
+    
+    int x_offset = 0, y_offset = 0;
+    std::string computed_layout;
+    BayerDemosaicing<Rtype, Atype, 3>::layout_from_offset(x_offset, y_offset, computed_layout, false);
+    // Print out the Bayer pattern layout
+    std::cout << "Bayer pattern layout: " << computed_layout << "\n";
+    
+    ImageBufAlgo::parallel_image(roi, nthreads, [&](ROI roi) {
+        ImageBuf::ConstIterator<Atype> s(src, roi);
+        ImageBuf::Iterator<Rtype> d(dst, roi);
+        
+        for (int y = roi.ybegin; y < roi.yend; y++) {
+            for (int x = roi.xbegin; x < roi.xend; x++) {
+                // Determine which color channel this pixel captured
+                size_t chan = BayerDemosaicing<Rtype, Atype, 3>::channel_at_offset(x + x_offset, y + y_offset);
+                
+                // Get the raw value from the source
+                float raw_value = s[0];
+                
+                // Set only the captured channel, others to zero
+                // Channel mapping: 0=R, 1=G1, 2=B, 3=G2
+                float bg_value = 0.0f; 
+                d[0] = chan == 0 ? raw_value : bg_value;  // R
+                d[1] = chan == 1 || chan == 3 ? raw_value : bg_value;  // G
+                d[2] = chan == 2 ? raw_value : bg_value;  // B
+                
+                s++;
+                d++;
+            }
+        }
+    });
+    
+    return true;
+}
+
+template<class Rtype, class Atype>
+static bool
 bayer_demosaic_linear_impl(ImageBuf& dst, const ImageBuf& src,
                            const std::string& layout,
                            const float (&white_balance)[4], ROI roi,
@@ -1090,7 +1134,14 @@ demosaic(ImageBuf& dst, const ImageBuf& src, KWArgs options, ROI roi,
             algorithm = "MHC";
         }
 
-        if (algorithm == "linear") {
+        if (algorithm == "raw") {
+            // Raw algorithm: show each pixel with only its captured color channel
+            OIIO_DISPATCH_COMMON_TYPES2(ok, "bayer_demosaic_raw",
+                                        bayer_demosaic_raw_impl,
+                                        dst.spec().format, src.spec().format,
+                                        dst, src, layout, white_balance_RGBG,
+                                        dst_roi, 1);
+        } else if (algorithm == "linear") {
             OIIO_DISPATCH_COMMON_TYPES2(ok, "bayer_demosaic_linear",
                                         bayer_demosaic_linear_impl,
                                         dst.spec().format, src.spec().format,

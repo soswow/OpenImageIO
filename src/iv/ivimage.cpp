@@ -8,6 +8,7 @@
 #include "imageviewer.h"
 #include <OpenImageIO/imagecache.h>
 #include <OpenImageIO/strutil.h>
+#include <OpenImageIO/imagebufalgo.h>
 
 
 IvImage::IvImage(const std::string& filename, const ImageSpec* input_config)
@@ -81,6 +82,18 @@ IvImage::read_iv(int subimage, int miplevel, bool force, TypeDesc format,
     } else {
         m_corrected_image.clear();
     }
+
+    // Apply demosaic if raw:Demosaic is set to "none"
+    if (m_image_valid && spec().get_string_attribute("raw:Demosaic") == "none") {
+        ParamValueList options;
+        options.push_back(ParamValue("algorithm", "raw"));
+        ImageBuf demosaiced = ImageBufAlgo::demosaic(*this, options);
+        if (!demosaiced.has_error()) {
+            // Replace the current image with the demosaiced version
+            ImageBuf::operator=(demosaiced);
+        }
+    }
+
     return m_image_valid;
 }
 

@@ -1027,6 +1027,7 @@ ImageViewer::add_image(const std::string& filename)
     if (rawcolor()) {
         ImageSpec config;
         config.attribute("oiio:RawColor", 1);
+        config.attribute("raw:Demosaic", "none");
         newimage = new IvImage(filename, &config);
     } else {
         newimage = new IvImage(filename);

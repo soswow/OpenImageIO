@@ -800,22 +800,88 @@ calculate_channel_stats(const ImageBuf& img, const ROI& roi, int channel,
         return ChannelStatsResult<T> { T(0), T(0), T(0) };
     }
 
+    // Check if this is a raw demosaiced image
+    bool is_raw_demosaic = img.spec().get_string_attribute("raw:Demosaic") == "none";
+    
     T min_val  = std::numeric_limits<T>::max();
     T max_val  = std::numeric_limits<T>::lowest();
     double sum = 0.0;
+    int valid_pixel_count = 0;
 
     ImageBuf::ConstIterator<T, T> it(img, roi);
     for (; !it.done(); ++it) {
-        T val   = it[channel];
-        min_val = std::min(min_val, val);
-        max_val = std::max(max_val, val);
-        sum += val;
+        T val = it[channel];
+        
+        if (is_raw_demosaic) {
+            // For raw demosaic, only count pixels that actually captured this channel
+            // Get the actual filter pattern from the image
+            std::string filter_pattern = img.spec().get_string_attribute("raw:FilterPattern");
+            if (filter_pattern.empty()) {
+                filter_pattern = "RGGB"; // Default fallback
+            }
+            
+            int x = it.x();
+            int y = it.y();
+            int bayer_channel = (y % 2) * 2 + (x % 2); 
+            /*
+             * 0 1
+             * 2 3
+             */
+            
+            // Map Bayer channel to actual color based on filter pattern
+            char color_at_pixel;
+            if (filter_pattern == "RGGB") {
+                // RGGB pattern: 0=R, 1=G, 2=G, 3=B
+                color_at_pixel = (bayer_channel == 0) ? 'R' : 
+                                (bayer_channel == 1 || bayer_channel == 2) ? 'G' : 'B';
+            } else if (filter_pattern == "BGGR") {
+                // BGGR pattern: 0=B, 1=G, 2=G, 3=R
+                color_at_pixel = (bayer_channel == 0) ? 'B' : 
+                                (bayer_channel == 1 || bayer_channel == 2) ? 'G' : 'R';
+            } else if (filter_pattern == "GRBG") {
+                // GRBG pattern: 0=G, 1=R, 2=B, 3=G
+                color_at_pixel = (bayer_channel == 0 || bayer_channel == 3) ? 'G' : 
+                                (bayer_channel == 1) ? 'R' : 'B';
+            } else if (filter_pattern == "RGBG") {
+                // RGBG pattern: 0=R, 1=G, 2=B, 3=G
+                color_at_pixel = (bayer_channel == 0) ? 'R' : 
+                                (bayer_channel == 1 || bayer_channel == 3) ? 'G' : 'B';
+            } else {
+                // Unknown pattern, fall back to RGGB
+                color_at_pixel = (bayer_channel == 0) ? 'R' : 
+                                (bayer_channel == 1 || bayer_channel == 2) ? 'G' : 'B';
+            }
+            
+            // Only include this pixel if it captured the channel we're interested in
+            bool should_include = (channel == 0 && color_at_pixel == 'R') ||  // Red
+                                 (channel == 1 && color_at_pixel == 'G') ||   // Green
+                                 (channel == 2 && color_at_pixel == 'B');     // Blue
+            
+            if (should_include) {
+                min_val = std::min(min_val, val);
+                max_val = std::max(max_val, val);
+                sum += val;
+                valid_pixel_count++;
+            }
+        } else {
+            // For normal images, include all pixels
+            min_val = std::min(min_val, val);
+            max_val = std::max(max_val, val);
+            sum += val;
+            valid_pixel_count++;
+        }
     }
 
     ChannelStatsResult<T> result;
-    result.min_val = min_val;
-    result.max_val = max_val;
-    result.avg_val = static_cast<T>(sum / pixel_count);
+    if (valid_pixel_count > 0) {
+        result.min_val = min_val;
+        result.max_val = max_val;
+        result.avg_val = static_cast<T>(sum / valid_pixel_count);
+    } else {
+        result.min_val = T(0);
+        result.max_val = T(0);
+        result.avg_val = T(0);
+    }
     return result;
 }
 
@@ -826,6 +892,9 @@ IvGL::paint_pixelview()
 
     IvImage* img = m_current_image;
     const ImageSpec& spec(img->spec());
+
+    // Check if this is a raw demosaiced image
+    bool is_raw_demosaic = img->spec().get_string_attribute("raw:Demosaic") == "none";
 
     // (x_mouse_viewport,y_mouse_viewport) are the window coordinates of the mouse.
     int x_mouse_viewport, y_mouse_viewport;
@@ -1159,8 +1228,12 @@ IvGL::paint_pixelview()
                 *img, avg_roi, channel, is_inside_data_window);
 
             centerValue = format("{:<5}", int(p[channel]));
-            normalized  = format("{:3.3f}", fpixel[channel])
-                         + center_value_separation_spaces;
+            if (is_raw_demosaic) {
+                normalized = "";  // No normalized value for raw UINT16
+            } else {
+                normalized = format("{:3.3f}", fpixel[channel])
+                             + center_value_separation_spaces;
+            }
             min = format("{:<5}", stats.min_val);
             max = format("{:<5}", stats.max_val);
             avg = format("{:<5}", stats.avg_val);
