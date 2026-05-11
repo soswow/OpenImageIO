@@ -60,4 +60,14 @@ after sorting:
   item pressure float (98.0, 98.5, 99.0, 99.5)
   item s string Bob
   item ucarr uint8[10] [49 50 51  0  0 97 98 99  1 88]
+
+--- module API (OpenImageIO / py_oiio) ---
+geterror_len 0 0
+is_tiff True
+is_fakefmt False
+__version__ 3.2.0.1dev
+get_int_attr 7
+get_flt_attr 0.5
+get_str_attr dflt
+getattribute_none True
 Done.

@@ -35,32 +35,55 @@ python_array_code(TypeDesc format)
 TypeDesc
 typedesc_from_python_array_code(string_view code)
 {
-    TypeDesc t(code);
-    if (!t.is_unknown())
-        return t;
+    // NumPy / buffer formats often use a leading '=' (standard-size prefix).
+    if (code.size() >= 2 && code[0] == '=') {
+        code.remove_prefix(1);
+    }
 
-    if (code == "b" || code == "c")
+    TypeDesc t(code);
+    if (!t.is_unknown()) {
+        return t;
+    }
+
+    if (code == "b" || code == "c") {
         return TypeDesc::INT8;
-    if (code == "B")
+    }
+    if (code == "B") {
         return TypeDesc::UINT8;
-    if (code == "h")
+    }
+    if (code == "h") {
         return TypeDesc::INT16;
-    if (code == "H")
+    }
+    if (code == "H") {
         return TypeDesc::UINT16;
-    if (code == "i")
+    }
+    if (code == "i") {
         return TypeDesc::INT;
-    if (code == "I")
+    }
+    if (code == "I") {
         return TypeDesc::UINT;
-    if (code == "l")
+    }
+    if (code == "l") {
         return TypeDesc::INT64;
-    if (code == "L")
+    }
+    if (code == "L") {
         return TypeDesc::UINT64;
-    if (code == "f")
+    }
+    if (code == "q") {
+        return TypeDesc::INT64;
+    }
+    if (code == "Q") {
+        return TypeDesc::UINT64;
+    }
+    if (code == "f") {
         return TypeDesc::FLOAT;
-    if (code == "d")
+    }
+    if (code == "d") {
         return TypeDesc::DOUBLE;
-    if (code == "float16" || code == "e")
+    }
+    if (code == "float16" || code == "e") {
         return TypeDesc::HALF;
+    }
     return TypeDesc::UNKNOWN;
 }
 

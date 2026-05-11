@@ -6,9 +6,9 @@
 
 #include <OpenImageIO/imagebuf.h>
 #include <OpenImageIO/imageio.h>
+#include <OpenImageIO/strutil.h>
 #include <OpenImageIO/oiioversion.h>
 #include <OpenImageIO/span.h>
-#include <OpenImageIO/strutil.h>
 #include <OpenImageIO/typedesc.h>
 
 #include <nanobind/make_iterator.h>
@@ -41,6 +41,40 @@ void
 declare_typedesc(nb::module_& m);
 void
 declare_paramvalue(nb::module_& m);
+void
+declare_deepdata(nb::module_& m);
+void
+declare_imageinput(nb::module_& m);
+void
+declare_imageoutput(nb::module_& m);
+void
+declare_imagebuf(nb::module_& m);
+void
+declare_imagebufalgo(nb::module_& m);
+void
+declare_argparse(nb::module_& m);
+
+/// Buffer metadata for NumPy / buffer-protocol interchange (see `py_oiio.cpp`).
+struct oiio_bufinfo {
+    TypeDesc format  = TypeUnknown;
+    void* data       = nullptr;
+    stride_t xstride = AutoStride, ystride = AutoStride, zstride = AutoStride;
+    size_t size = 0;
+    std::string error;
+
+    oiio_bufinfo(const Py_buffer& pybuf);
+    oiio_bufinfo(const Py_buffer& pybuf, int nchans, int width, int height,
+                 int depth, int pixeldims);
+
+    template<typename T> T dataval(size_t i) const
+    {
+        return reinterpret_cast<const T*>(data)[i];
+    }
+};
+
+nb::object
+make_numpy_array(TypeDesc format, void* data, int dims, size_t chans,
+                 size_t width, size_t height, size_t depth = 1);
 
 template<typename T> struct PyTypeForCType {};
 template<> struct PyTypeForCType<int> {
@@ -340,6 +374,13 @@ C_to_tuple(const T* vals, size_t size)
     for (size_t i = 0; i < size; ++i)
         list.append(nb::cast(vals[i]));
     return nb::steal<nb::tuple>(PyList_AsTuple(list.ptr()));
+}
+
+template<typename T>
+inline nb::tuple
+C_to_tuple(const std::vector<T>& vals)
+{
+    return C_to_tuple(vals.data(), vals.size());
 }
 
 template<typename T>

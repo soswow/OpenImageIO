@@ -141,6 +141,21 @@ try:
     print ("after sorting:")
     print_param_list(pl)
 
+    # Module-level _OpenImageIO / OpenImageIO API (src/python-nanobind/py_oiio.cpp)
+    print ("")
+    print ("--- module API (OpenImageIO / py_oiio) ---")
+    _e0 = oiio.geterror (False)
+    _e1 = oiio.geterror (True)
+    print ("geterror_len", len (_e0 or ""), len (_e1 or ""))
+    print ("is_tiff", oiio.is_imageio_format_name ("tiff"))
+    print ("is_fakefmt", oiio.is_imageio_format_name ("not_a_real_format_zz"))
+    print ("__version__", oiio.__version__)
+    print ("get_int_attr", oiio.get_int_attribute ("no_such_global_int", 7))
+    print ("get_flt_attr", oiio.get_float_attribute ("no_such_global_flt", 0.5))
+    print ("get_str_attr", oiio.get_string_attribute ("no_such_global_str", "dflt"))
+    _g = oiio.getattribute ("no_such_typed", oiio.TypeString)
+    print ("getattribute_none", _g is None)
+
     print ("Done.")
 except Exception as detail:
     print ("Unknown exception:", detail)

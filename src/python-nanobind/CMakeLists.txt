@@ -7,7 +7,13 @@ set (nanobind_srcs
      py_paramvalue.cpp
      py_roi.cpp
      py_imagespec.cpp
-     py_typedesc.cpp)
+     py_typedesc.cpp
+     py_deepdata.cpp
+     py_imageinput.cpp
+     py_imageoutput.cpp
+     py_imagebuf.cpp
+     py_imagebufalgo.cpp
+     py_argparse.cpp)
 
 set (nanobind_build_package_dir ${CMAKE_BINARY_DIR}/lib/python/nanobind/OpenImageIO)
 file (MAKE_DIRECTORY ${nanobind_build_package_dir})

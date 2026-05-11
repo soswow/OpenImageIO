@@ -1,0 +1,27 @@
+parse_rc 0
+has_error False
+err ''
+v 1
+count 2
+filename ('a.exr', 'b.exr')
+bad_rc -1
+bad_err_nonempty True
+bad_err_cleared_after True
+arg_argparse_is_self True
+ex_rc 0
+ex_n 0
+ex_q 1
+ex_fstore 2.5
+ex_sstore hi
+ex_mval 3
+ex_ci 42
+ex_cf 1.25
+ex_cs ok
+params_len 8
+cmdline_skip True
+prog_name_skip True
+defl_rc 0 defl_df 9.5
+aborted True
+aborted_clear False
+getitem_err KeyError
+always_run_rc 0

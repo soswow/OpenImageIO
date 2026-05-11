@@ -241,6 +241,11 @@ if (OIIO_BUILD_TESTS AND BUILD_TESTING)
                                          ${OPENIMAGEIO_OPENEXR_TARGETS})
     add_test (unit_typedesc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/typedesc_test)
 
+    fancy_add_executable (NAME python_array_format_test SRC python_array_format_test.cpp
+                          NO_INSTALL  FOLDER "Unit Tests"
+                          LINK_LIBRARIES OpenImageIO_Util)
+    add_test (unit_python_array_format ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/python_array_format_test)
+
     fancy_add_executable (NAME type_traits_test SRC type_traits_test.cpp
                           NO_INSTALL  FOLDER "Unit Tests"
                           LINK_LIBRARIES OpenImageIO_Util

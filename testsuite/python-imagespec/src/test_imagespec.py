@@ -77,6 +77,7 @@ try:
     print ("  channel_bytes(1) =", s.channel_bytes(1), "native", s.channel_bytes(1,True))
     print ("  channel_bytes(4) =", s.channel_bytes(4), "native", s.channel_bytes(4,True))
     print ("pixel bytes =", s.pixel_bytes(), "native", s.pixel_bytes(True))
+    print ("  pixel_bytes(0,3) =", s.pixel_bytes(0, 3), "natF", s.pixel_bytes(0, 3, False), "natT", s.pixel_bytes(0, 3, True))
     print ("scanline bytes =", s.scanline_bytes(), "native", s.scanline_bytes(True), "if uint16", s.scanline_bytes("uint16"))
     print ("tile bytes =", s.tile_bytes(), "native", s.tile_bytes(True), "if uint16", s.tile_bytes("uint16"))
     print ("image bytes =", s.image_bytes(), "native", s.image_bytes(True), "if uint16", s.image_bytes("uint16"))
@@ -160,6 +161,7 @@ try:
     print (s.serialize("xml"))
     print ("serialize(text, human):")
     print (s.serialize("text", "detailedhuman"))
+    print ("serialize(text,brief) len:", len(s.serialize("text", "brief")))
     print ()
 
     repl = oiio.ParamValueList ()

@@ -222,6 +222,31 @@ def test_outofrange_subimage_miplevel() :
         print(" ", f, "subimage 0 mip 1:", ok, buf.geterror())
 
 
+def test_half_getpixels () :
+    # HALF vs FLOAT ImageBuf.get_pixels (matches pybind vs nanobind ref/out.txt).
+    print ("")
+    print ("--- shared: HALF get_pixels ---")
+    spec = oiio.ImageSpec (2, 2, 3, oiio.HALF)
+    buf = oiio.ImageBuf (spec)
+    buf.setpixel (0, 0, 0, (0.25, 0.5, 1.0))
+    buf.setpixel (1, 0, 0, (0.0, -2.0, 3.5))
+    buf.setpixel (0, 1, 0, (1.0, 1.0, 1.0))
+    buf.setpixel (1, 1, 0, (0.1, 0.2, 0.3))
+
+    gp_half = buf.get_pixels (oiio.HALF)
+    print ("half_dtype", gp_half.dtype.str)
+    print ("half_kind", gp_half.dtype.kind)
+    print ("half_itemsize", int (gp_half.dtype.itemsize))
+    print ("half_shape", gp_half.shape)
+    flat = gp_half.reshape (-1, gp_half.shape[-1])
+    for i in range (flat.shape[0]) :
+        print ("half_row%d" % i, [float (x) for x in flat[i]])
+
+    gp_float = buf.get_pixels (oiio.FLOAT)
+    print ("float_dtype", gp_float.dtype.str)
+    print ("float_shape", gp_float.shape)
+    print ("--- end shared: HALF get_pixels ---")
+
 
 ######################################################################
 # main test starts here
@@ -334,6 +359,7 @@ try:
     test_copy_metadata ()
     test_repr_png ()
     test_outofrange_subimage_miplevel ()
+    test_half_getpixels ()
 
     print ("\nDone.")
 except Exception as detail:

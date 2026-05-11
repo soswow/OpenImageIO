@@ -263,7 +263,14 @@ macro (oiio_add_all_tests)
              python-imagespec
              python-paramlist
              python-roi
-             python-typedesc)
+             python-typedesc
+             python-oiio
+             python-imagebuf
+             python-argparse-nanobind)
+        set (nanobind_python_tests_need_images
+             python-imageinput
+             python-imageoutput
+             python-imagebufalgo)
         set (nanobind_python_test_suffix ".nanobind")
         if (OIIO_BUILD_PYTHON_PYBIND11)
             oiio_add_tests (
@@ -278,6 +285,7 @@ macro (oiio_add_all_tests)
                 python-roi
                 python-texturesys
                 python-typedesc
+                python-oiio
                 filters
                 ENVIRONMENT "${_pybind_tests_pythonpath}"
                 )
@@ -295,6 +303,12 @@ macro (oiio_add_all_tests)
             oiio_add_tests (
                 ${nanobind_python_tests}
                 SUFFIX ${nanobind_python_test_suffix}
+                ENVIRONMENT "${_nanobind_tests_pythonpath}"
+                )
+            oiio_add_tests (
+                ${nanobind_python_tests_need_images}
+                SUFFIX ${nanobind_python_test_suffix}
+                IMAGEDIR oiio-images
                 ENVIRONMENT "${_nanobind_tests_pythonpath}"
                 )
         endif ()

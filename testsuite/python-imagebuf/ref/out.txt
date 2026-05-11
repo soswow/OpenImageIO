@@ -245,6 +245,19 @@ Testing error handling for out-of-range subimage, miplevel
   tahoe-tiny.tif subimage 0 mip 0: True 
   tahoe-tiny.tif subimage 0 mip 1: False Could not seek to subimage=0 miplevel=1
 
+--- shared: HALF get_pixels ---
+half_dtype <f2
+half_kind f
+half_itemsize 2
+half_shape (2, 2, 3)
+half_row0 [0.25, 0.5, 1.0]
+half_row1 [0.0, -2.0, 3.5]
+half_row2 [1.0, 1.0, 1.0]
+half_row3 [0.0999755859375, 0.199951171875, 0.300048828125]
+float_dtype <f4
+float_shape (2, 2, 3)
+--- end shared: HALF get_pixels ---
+
 Done.
 Comparing "out.tif" and "ref/out.tif"
 PASS
