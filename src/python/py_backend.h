@@ -10,6 +10,8 @@
 #    include <nanobind/nanobind.h>
 #    include <nanobind/ndarray.h>
 #    include <nanobind/operators.h>
+#    include <nanobind/stl/array.h>
+#    include <nanobind/stl/optional.h>
 #    include <nanobind/stl/string.h>
 #    include <nanobind/stl/vector.h>
 
@@ -21,6 +23,7 @@ using namespace py::literals;
 #    define OIIO_PY_PROP_RO def_prop_ro
 #    define OIIO_PY_PROP_RW def_prop_rw
 #    define OIIO_PY_RO_STATIC def_prop_ro_static
+#    define OIIO_PY_RO def_ro
 
 namespace oiio_py {
 
@@ -105,6 +108,7 @@ using namespace py::literals;
 #    define OIIO_PY_PROP_RO def_property_readonly
 #    define OIIO_PY_PROP_RW def_property
 #    define OIIO_PY_RO_STATIC def_property_readonly_static
+#    define OIIO_PY_RO def_readonly
 
 namespace oiio_py {
 

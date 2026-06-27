@@ -4,12 +4,12 @@
 
 #include "py_oiio.h"
 
-#include <OpenImageIO/sysutil.h>
+#include <type_traits>
 
 #if defined(OIIO_PY_BACKEND_NANOBIND)
 #    include <OpenImageIO/oiioversion.h>
-#    include <cstring>
 #endif
+#include <OpenImageIO/sysutil.h>
 
 namespace PyOpenImageIO {
 
@@ -71,18 +71,60 @@ typedesc_from_python_array_code(string_view code)
 
 
 
-#ifndef OIIO_PY_BACKEND_NANOBIND
-
-oiio_bufinfo::oiio_bufinfo(const py::buffer_info& pybuf)
+oiio_py_buffer_view
+oiio_py_request_buffer(const py::object& obj)
 {
-    if (pybuf.format.size())
+    oiio_py_buffer_view info;
+#if defined(OIIO_PY_BACKEND_NANOBIND)
+    Py_buffer view;
+    if (PyObject_GetBuffer(obj.ptr(), &view, PyBUF_STRIDES | PyBUF_FORMAT)
+        != 0) {
+        PyErr_Clear();
+        return info;
+    }
+    info.ptr      = view.buf;
+    info.itemsize = view.itemsize;
+    info.ndim     = view.ndim;
+    if (view.ndim > 0) {
+        info.shape.assign(view.shape, view.shape + view.ndim);
+        info.strides.assign(view.strides, view.strides + view.ndim);
+        info.size = 1;
+        for (int i = 0; i < view.ndim; ++i) {
+            info.size *= view.shape[i];
+        }
+    } else {
+        info.size = view.len / std::max<Py_ssize_t>(view.itemsize, 1);
+    }
+    if (view.format && view.format[0]) {
+        info.format = view.format;
+    }
+    PyBuffer_Release(&view);
+#else
+    const py::buffer_info req = py::cast<py::buffer>(obj).request();
+    info.ptr                  = req.ptr;
+    info.itemsize             = req.itemsize;
+    info.size                 = req.size;
+    info.ndim                 = req.ndim;
+    info.shape.assign(req.shape.begin(), req.shape.end());
+    info.strides.assign(req.strides.begin(), req.strides.end());
+    info.format = req.format;
+#endif
+    return info;
+}
+
+
+
+oiio_bufinfo::oiio_bufinfo(const oiio_py_buffer_view& pybuf)
+{
+    if (pybuf.format.size()) {
         format = typedesc_from_python_array_code(pybuf.format);
+    }
     if (format != TypeUnknown) {
         data    = pybuf.ptr;
         xstride = format.size();
         size    = 1;
         for (int i = pybuf.ndim - 1; i >= 0; --i) {
-            if (pybuf.strides[i] != py::ssize_t(size * xstride)) {
+            if (pybuf.strides[i] != Py_ssize_t(size * xstride)) {
                 // Just can't handle non-contiguous strides
                 format = TypeUnknown;
                 size   = 0;
@@ -95,11 +137,12 @@ oiio_bufinfo::oiio_bufinfo(const py::buffer_info& pybuf)
 
 
 
-oiio_bufinfo::oiio_bufinfo(const py::buffer_info& pybuf, int nchans, int width,
-                           int height, int depth, int pixeldims)
+oiio_bufinfo::oiio_bufinfo(const oiio_py_buffer_view& pybuf, int nchans,
+                           int width, int height, int depth, int pixeldims)
 {
-    if (pybuf.format.size())
+    if (pybuf.format.size()) {
         format = typedesc_from_python_array_code(pybuf.format);
+    }
     if (size_t(pybuf.itemsize) != format.size()
         || pybuf.size
                != int64_t(width) * int64_t(height) * int64_t(depth * nchans)) {
@@ -141,10 +184,10 @@ oiio_bufinfo::oiio_bufinfo(const py::buffer_info& pybuf, int nchans, int width,
             // Somebody collapsed a dimension. Is it [pixel][c] with x&y
             // combined, or is it [y][xpixel] with channels mushed together?
             if (pybuf.shape[0] == int64_t(width) * int64_t(height)
-                && pybuf.shape[1] == nchans)
+                && pybuf.shape[1] == nchans) {
                 xstride = pybuf.strides[0];
-            else if (pybuf.shape[0] == height
-                     && pybuf.shape[1] == int64_t(width) * int64_t(nchans)) {
+            } else if (pybuf.shape[0] == height
+                       && pybuf.shape[1] == int64_t(width) * int64_t(nchans)) {
                 ystride = pybuf.strides[1];
                 xstride = pybuf.strides[0] * nchans;
             } else {
@@ -163,7 +206,8 @@ oiio_bufinfo::oiio_bufinfo(const py::buffer_info& pybuf, int nchans, int width,
             format = TypeUnknown;  // No idea what's going on -- error
             error  = Strutil::fmt::format(
                 "Python array shape is [{:,}] but expecting h={}, w={}, ch={}",
-                cspan<py::ssize_t>(pybuf.shape), height, width, nchans);
+                cspan<const Py_ssize_t>(pybuf.shape.data(), pybuf.shape.size()),
+                height, width, nchans);
         }
     } else if (pixeldims == 1) {
         // Reading a 1D scanline span
@@ -187,18 +231,188 @@ oiio_bufinfo::oiio_bufinfo(const py::buffer_info& pybuf, int nchans, int width,
             pybuf.ndim);
     }
 
-    if (nchans > 1 && format.size()
+    if (nchans > 1 && format.size() && pybuf.ndim > 0
         && size_t(pybuf.strides.back()) != format.size()) {
         format = TypeUnknown;  // can't handle noncontig channels
         error  = "Can't handle numpy array with noncontiguous channels";
     }
-    if (format != TypeUnknown)
+    if (format != TypeUnknown) {
         data = pybuf.ptr;
+    }
 }
 
 
 
-#endif  // !OIIO_PY_BACKEND_NANOBIND
+namespace {
+
+    template<class T>
+    py::object make_numpy_array_t(T* data, int dims, size_t chans, size_t width,
+                                  size_t height, size_t depth)
+    {
+        const size_t size = chans * width * height * depth;
+        T* mem            = data ? data : new T[size];
+#if defined(OIIO_PY_BACKEND_NANOBIND)
+        py::capsule owner(mem, [](void* p) noexcept {
+            delete[] reinterpret_cast<T*>(p);
+        });
+        if (dims == 4) {
+            return py::cast(
+                py::ndarray<py::numpy, T>(
+                    mem, { depth, height, width, chans }, owner,
+                    { py::ssize_t(height * width * chans * sizeof(T)),
+                      py::ssize_t(width * chans * sizeof(T)),
+                      py::ssize_t(chans * sizeof(T)), py::ssize_t(sizeof(T)) }),
+                py::rv_policy::move);
+        }
+        if (dims == 3 && depth == 1) {
+            return py::cast(py::ndarray<py::numpy, T>(
+                                mem, { height, width, chans }, owner,
+                                { py::ssize_t(width * chans * sizeof(T)),
+                                  py::ssize_t(chans * sizeof(T)),
+                                  py::ssize_t(sizeof(T)) }),
+                            py::rv_policy::move);
+        }
+        if (dims == 2 && depth == 1 && height == 1) {
+            return py::cast(
+                py::ndarray<py::numpy, T>(mem, { width, chans }, owner,
+                                          { py::ssize_t(chans * sizeof(T)),
+                                            py::ssize_t(sizeof(T)) }),
+                py::rv_policy::move);
+        }
+        return oiio_py::make_numpy_array(mem, size);
+#else
+        // Create a Python object that will free the allocated memory when
+        // destroyed:
+        py::capsule free_when_done(mem, [](void* f) {
+            delete[] (reinterpret_cast<T*>(f));
+        });
+        std::vector<size_t> shape, strides;
+        if (dims == 4) {  // volumetric
+            shape.assign({ depth, height, width, chans });
+            strides.assign({ height * width * chans * sizeof(T),
+                             width * chans * sizeof(T), chans * sizeof(T),
+                             sizeof(T) });
+        } else if (dims == 3 && depth == 1) {  // 2D+channels
+            shape.assign({ height, width, chans });
+            strides.assign(
+                { width * chans * sizeof(T), chans * sizeof(T), sizeof(T) });
+        } else if (dims == 2 && depth == 1
+                   && height == 1) {  // 1D (scanline) + channels
+            shape.assign({ width, chans });
+            strides.assign({ chans * sizeof(T), sizeof(T) });
+        } else {  // punt -- make it a 1D array
+            shape.assign({ size });
+            strides.assign({ sizeof(T) });
+        }
+        return py::array_t<T>(shape, strides, mem, free_when_done);
+#endif
+    }
+
+#if defined(OIIO_PY_BACKEND_NANOBIND)
+    template<>
+    py::object make_numpy_array_t<half>(half* data, int dims, size_t chans,
+                                        size_t width, size_t height,
+                                        size_t depth)
+    {
+        const size_t size = chans * width * height * depth;
+        half* hmem        = data ? data : new half[size];
+        float* fmem       = new float[size];
+        for (size_t i = 0; i < size; ++i) {
+            fmem[i] = float(hmem[i]);
+        }
+        delete[] hmem;
+        return make_numpy_array_t<float>(fmem, dims, chans, width, height,
+                                         depth);
+    }
+#else
+    template<>
+    py::object make_numpy_array_t<half>(half* data, int dims, size_t chans,
+                                        size_t width, size_t height,
+                                        size_t depth)
+    {
+        const size_t size = chans * width * height * depth;
+        half* mem         = data ? data : new half[size];
+        // Create a Python object that will free the allocated memory when
+        // destroyed:
+        py::capsule free_when_done(mem, [](void* f) {
+            delete[] (reinterpret_cast<half*>(f));
+        });
+        std::vector<size_t> shape, strides;
+        if (dims == 4) {  // volumetric
+            shape.assign({ depth, height, width, chans });
+            strides.assign({ height * width * chans * sizeof(half),
+                             width * chans * sizeof(half), chans * sizeof(half),
+                             sizeof(half) });
+        } else if (dims == 3 && depth == 1) {  // 2D+channels
+            shape.assign({ height, width, chans });
+            strides.assign({ width * chans * sizeof(half), chans * sizeof(half),
+                             sizeof(half) });
+        } else if (dims == 2 && depth == 1
+                   && height == 1) {  // 1D (scanline) + channels
+            shape.assign({ width, chans });
+            strides.assign({ chans * sizeof(half), sizeof(half) });
+        } else {  // punt -- make it a 1D array
+            shape.assign({ size });
+            strides.assign({ sizeof(half) });
+        }
+        return py::array_t<half>(shape, strides, mem, free_when_done);
+    }
+#endif
+
+}  // namespace
+
+
+
+template<class T>
+py::object
+make_numpy_array(T* data, int dims, size_t chans, size_t width, size_t height,
+                 size_t depth)
+{
+    return make_numpy_array_t(data, dims, chans, width, height, depth);
+}
+
+
+
+py::object
+make_numpy_array(TypeDesc format, void* data, int dims, size_t chans,
+                 size_t width, size_t height, size_t depth)
+{
+    if (format == TypeDesc::FLOAT) {
+        return make_numpy_array((float*)data, dims, chans, width, height,
+                                depth);
+    }
+    if (format == TypeDesc::UINT8) {
+        return make_numpy_array((unsigned char*)data, dims, chans, width,
+                                height, depth);
+    }
+    if (format == TypeDesc::UINT16) {
+        return make_numpy_array((unsigned short*)data, dims, chans, width,
+                                height, depth);
+    }
+    if (format == TypeDesc::INT8) {
+        return make_numpy_array((char*)data, dims, chans, width, height, depth);
+    }
+    if (format == TypeDesc::INT16) {
+        return make_numpy_array((short*)data, dims, chans, width, height,
+                                depth);
+    }
+    if (format == TypeDesc::DOUBLE) {
+        return make_numpy_array((double*)data, dims, chans, width, height,
+                                depth);
+    }
+    if (format == TypeDesc::HALF) {
+        return make_numpy_array((half*)data, dims, chans, width, height, depth);
+    }
+    if (format == TypeDesc::UINT) {
+        return make_numpy_array((unsigned int*)data, dims, chans, width, height,
+                                depth);
+    }
+    if (format == TypeDesc::INT) {
+        return make_numpy_array((int*)data, dims, chans, width, height, depth);
+    }
+    delete[] (char*)data;
+    return py::none();
+}
 
 
 
@@ -288,14 +502,6 @@ declare_global_bindings(py_module& m)
     declare_paramvalue(m);
     declare_imagespec(m);
     declare_roi(m);
-}
-
-
-
-#ifndef OIIO_PY_BACKEND_NANOBIND
-static void
-declare_pybind_bindings(py_module& m)
-{
     declare_deepdata(m);
     declare_colorconfig(m);
 
@@ -314,7 +520,6 @@ declare_pybind_bindings(py_module& m)
 
     declare_imagebufalgo(m);
 }
-#endif
 
 
 
@@ -352,14 +557,6 @@ declare_global_attribute_functions(py_module& m)
         "name"_a, "defaultval"_a = "");
     m.def("getattribute", &oiio_getattribute_typed, "name"_a,
           "type"_a = TypeUnknown);
-}
-
-
-
-#ifndef OIIO_PY_BACKEND_NANOBIND
-static void
-declare_pybind_global_functions(py_module& m)
-{
     m.def("geterror", &OIIO::geterror, "clear"_a = true);
     m.def(
         "get_bytes_attribute",
@@ -393,7 +590,6 @@ declare_pybind_global_functions(py_module& m)
         },
         "name"_a);
 }
-#endif
 
 
 
@@ -401,8 +597,15 @@ static void
 declare_module_attributes(py_module& m)
 {
 #if defined(OIIO_PY_BACKEND_NANOBIND)
-    m.attr("__version__")    = OIIO_VERSION_STRING;
-    m.attr("VERSION_STRING") = OIIO_VERSION_STRING;
+    m.attr("AutoStride")          = AutoStride;
+    m.attr("openimageio_version") = OIIO_VERSION;
+    m.attr("VERSION")             = OIIO_VERSION;
+    m.attr("VERSION_STRING")      = OIIO_VERSION_STRING;
+    m.attr("VERSION_MAJOR")       = OIIO_VERSION_MAJOR;
+    m.attr("VERSION_MINOR")       = OIIO_VERSION_MINOR;
+    m.attr("VERSION_PATCH")       = OIIO_VERSION_PATCH;
+    m.attr("INTRO_STRING")        = OIIO_INTRO_STRING;
+    m.attr("__version__")         = OIIO_VERSION_STRING;
 #else
     m.attr("AutoStride")          = AutoStride;
     m.attr("openimageio_version") = OIIO_VERSION;
@@ -451,9 +654,7 @@ OIIO_DECLARE_PYMODULE(PYMODULE_NAME)
         Sysutil::setup_crash_stacktrace("stdout");
 
     declare_global_bindings(m);
-    declare_pybind_bindings(m);
     declare_global_attribute_functions(m);
-    declare_pybind_global_functions(m);
     declare_module_attributes(m);
 }
 
